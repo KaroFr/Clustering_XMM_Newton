@@ -1,8 +1,10 @@
 # Clustering_XMM_Newton
 
 ## Requirements
-The pipeline uses hdbscan which can be installed using Anaconda as follows:
- - conda install -c conda-forge hdbscan
+The pipeline uses hdbscan which can be installed as follows:
+```
+conda install -c conda-forge hdbscan
+```
  
 ## How to run
 ```
