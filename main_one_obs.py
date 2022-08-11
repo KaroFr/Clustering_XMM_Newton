@@ -17,7 +17,6 @@ from astropy.table import vstack
 import os
 import time
 from astropy.table import Table
-# import numpy as np
 
 # make a directory for the upcoming results, if not already existend
 if not os.path.isdir('evFiles'):
@@ -55,9 +54,9 @@ observation_ID = '0870830201'
 # ms_noise_det = 20                                  # default = 20
 
 # hyper parameters for the HDBSCAN for the ensemble
-# mcs_HDBSCAN = np.array([10,10,15,20])              # default = np.array([10,10,15,20])
-# ms_HDBSCAN = np.array([20,40,30,60])               # default = np.array([20,40,30,60])
-# cse_HDBSCAN = np.array([0.005,0.005,0.005,0.005])  # default = np.array([0.005,0.005,0.005,0.005])
+# mcs_HDBSCAN = [10,10,15,20]                        # default = [10,10,15,20]
+# ms_HDBSCAN = [20,40,30,60]                         # default = [20,40,30,60]
+# cse_HDBSCAN = [0.005,0.005,0.005,0.005]            # default = [0.005,0.005,0.005,0.005]
 
 # threshold to disregard noise before the consensus clustering
 # not_noise_threshold = 2                            # default = 2

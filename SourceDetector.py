@@ -28,8 +28,8 @@ class SourceDetector:
     clusters_HDBSCAN = Table()
     final_clusters_HDBSCAN = Table()
     
-    def __init__(self, events, header, ID, ms_noise_det = 20, mcs_HDBSCAN = np.array([10,10,15,20]), 
-                 ms_HDBSCAN = np.array([20,40,30,60]), cse_HDBSCAN = np.array([0.005,0.005,0.005,0.005]), not_noise_threshold = 2):
+    def __init__(self, events, header, ID, ms_noise_det = 20, mcs_HDBSCAN = [10,10,15,20], 
+                 ms_HDBSCAN = [20,40,30,60], cse_HDBSCAN = [0.005,0.005,0.005,0.005], not_noise_threshold = 2):
         self.events_sources = events
         self.n_events_bnd = len(events)
         self.events_noise = Table()

@@ -17,7 +17,6 @@ from astropy.table import vstack
 import os
 import time
 from astropy.table import Table
-# import numpy as np
 
 # make a directory for the upcoming results, if not already existend
 if not os.path.isdir('evFiles'):
@@ -27,7 +26,7 @@ if not os.path.isdir('results'):
 
 try:
     results_table = Table.read('results/results_csv.csv')
-    ID = max(results_table['ID']) + 1
+    ID = max(results_table['ID'])
 except:
     ID = 0
 
@@ -43,6 +42,9 @@ observations = ['0827350201','0860260601','0860302501','0861610201','0862730101'
 ##########################################################################
 ############# set the parameters
 ##########################################################################
+# scaling factor for the linear normalization
+# scale_factor = 3                                   # default = 3
+
 # min_samples for the DBSCAN for the bti detection
 # ms_bti_det = 100                                   # default = 100
 
@@ -55,15 +57,16 @@ observations = ['0827350201','0860260601','0860302501','0861610201','0862730101'
 # ms_noise_det = 20                                  # default = 20
 
 # hyper parameters for the HDBSCAN for the ensemble
-# mcs_HDBSCAN = np.array([10,10,15,20])              # default = np.array([10,10,15,20])
-# ms_HDBSCAN = np.array([20,40,30,60])               # default = np.array([20,40,30,60])
-# cse_HDBSCAN = np.array([0.005,0.005,0.005,0.005])  # default = np.array([0.005,0.005,0.005,0.005])
+# mcs_HDBSCAN = [10,10,15,20]                        # default = [10,10,15,20]
+# ms_HDBSCAN = [20,40,30,60]                         # default = [20,40,30,60]
+# cse_HDBSCAN = [0.005,0.005,0.005,0.005]            # default = [0.005,0.005,0.005,0.005]
 
 # threshold to disregard noise before the consensus clustering
 # not_noise_threshold = 2                            # default = 2
 
 # threshold for two sources to be a match in the validation
 # distance_threshold = 300                           # default = 300
+
 for observation_ID in observations:
     ##########################################################################
     ############# loading the data
@@ -73,7 +76,8 @@ for observation_ID in observations:
     ID = ID + 1
     print("Observation ID: " + observation_ID + ", ID: " + str(ID))
     events, header = load_events(observation_ID)
-    events = linear_normalization(events, 3)
+    # events = linear_normalization(events)
+    events = linear_normalization(events, scale_factor)
     
     ##########################################################################
     ############# ceaning the bad time intervals

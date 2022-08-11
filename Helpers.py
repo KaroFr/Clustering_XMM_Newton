@@ -21,6 +21,10 @@ Method to download the important files from the XMM Newton Archive
 Input:  the observation ID, that should be loaded
 """
 def download_data(observation_ID):
+    if len(observation_ID) != 10 or type(observation_ID) != str:
+        print("Invalid observation ID: It must be a 10 digits String.")
+        return
+    
     matches_FTZ = []
     matches_OBSMLI = []
 
@@ -111,6 +115,10 @@ Input:  the observation ID, that should be opened
 Output: header and data of the events file
 """
 def load_events(observation_ID):
+    if len(observation_ID) != 10 or type(observation_ID) != str:
+        print("Invalid observation ID: It must be a 10 digits String.")
+        return
+    
     # look for files in local directory
     files = os.listdir("evFiles")
     selected_files = []
@@ -162,12 +170,21 @@ Load the sources file from the local directory.
 It has been downloaded together with the events file.
 """
 def load_sources(observation_ID):
-    srcFile = 'P' + str(observation_ID) + 'PNEPX000OBSMLI0000.FTZ'
-
-    with fits.open("evFiles/" + srcFile) as sourceHDU:
-        srclist = sourceHDU['SRCLIST'].data
+    if len(observation_ID) != 10 or type(observation_ID) != str:
+        print("Invalid observation ID: It must be a 10 digits String.")
+        return
     
-    return srclist
+    srcFile = 'P' + str(observation_ID) + 'PNEPX000OBSMLI0000.FTZ'
+    
+    try:
+        with fits.open("evFiles/" + srcFile) as sourceHDU:
+            srclist = sourceHDU['SRCLIST'].data
+        return srclist
+    except:
+        download_data(observation_ID)
+        with fits.open("evFiles/" + srcFile) as sourceHDU:
+            srclist = sourceHDU['SRCLIST'].data
+        return srclist
 
 """
 Save an astropy table to a csv file
