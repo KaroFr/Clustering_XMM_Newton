@@ -21,3 +21,5 @@ To run multiple observations in a row, run the following script. Again the obser
 ```
 python main_multiple_obs.py
 ```
+
+The downloaded event files and the results will be stored in the folders 'evFiles' and 'results'.
