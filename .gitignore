@@ -1,6 +1,9 @@
 # pyCharm stuff
 .idea/
 
+# Apple stuff
+.DS_Store
+
 # local folders created during use
 evFiles/
 results/
