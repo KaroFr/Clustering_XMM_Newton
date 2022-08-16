@@ -10,7 +10,11 @@ from Helpers import pick_sample
 from astropy.table import vstack
 import matplotlib.pyplot as plt
 from astropy.table import Table
-import os
+import os, time
+
+from concurrent.futures import ThreadPoolExecutor, wait, as_completed
+from Multithreading import Multithreading
+
 
 """
 Class to detect and clean the bad time intervals in one observation
@@ -155,7 +159,7 @@ class BTICleaner:
             self.events_before_cleaning = events_thined.copy()
         
         print('  - Finished the bti detection.')
-    
+
     """
     Method to clean the bad time intervals (btis)
     Input:  the number of bins for the cleaning
@@ -175,10 +179,10 @@ class BTICleaner:
         time_gtis = self.time_gtis
         
         # set the detector boundaries
-        min_DETX = min(events['DETX'])
-        min_DETY = min(events['DETY'])
-        max_DETX = max(events['DETX'])
-        max_DETY = max(events['DETY'])
+        self.min_DETX = min(events['DETX'])
+        self.min_DETY = min(events['DETY'])
+        self.max_DETX = max(events['DETX'])
+        self.max_DETY = max(events['DETY'])
         
         # get the quantiles of PI
         quant_prob = np.round(np.linspace(0.0, 1.0, num = n_bins_PI+1), 3)
@@ -203,71 +207,127 @@ class BTICleaner:
         # need it for the btis_table
         n_rows = n_bins_DETX*n_bins_DETY
 
-        for energy_events in energy_events_list:
-            energy_events_gtis = energy_events[(energy_events['flare_label'] == -1)]
-            energy_events_btis = energy_events[(energy_events['flare_label'] != -1)]
-            
-            # set the bins 
-            quant_prob_DETY = np.round(np.linspace(0.0, 1.0, num = n_bins_DETY+1), 3)
-            quant_prob_DETX = np.round(np.linspace(0.0, 1.0, num = n_bins_DETY+1), 3)
-            quantiles_DETY = np.quantile(events["DETY"], quant_prob_DETY)
-            quantiles_DETX = np.quantile(events["DETX"], quant_prob_DETX)
+        #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        #
+        #   Sequential job
+        #
+        # print('-' * 100)
+        # print('  - Start clean_btis in a row ...')
+        # t_0 = time.time()
+        # for energy_events in energy_events_list:
+        #     self.clean_btis_thread(input=energy_events,
+        #                            events_PN_btis_cleaned=events_PN_btis_cleaned, n_rows=n_rows)
+        # t_1 = time.time() - t_0
+        # print(f'\t** Time to run all threads in sequence : {t_1:.2f} seconds')
+        # print('-' * 100)
+        # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        #
+        #   Parallel job
+        #
+        print('  - Start clean_btis in parallel ...')
+        t_4 = time.time()
+        energy_events_list_len = len(energy_events_list)
+        threads = energy_events_list_len
+        m = Multithreading(threads=threads, function=self.clean_btis_thread, input_list=energy_events_list,
+                           events_PN_btis_cleaned=events_PN_btis_cleaned, n_rows=n_rows)
+        m.multi()
+        t_5 = time.time()
+        print(f'\t** Time to run all threads in parallel : {t_5 - t_4:.4f} seconds')
+        # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-            # calculate the histogram for all the good time intervals
-            H_gtis, xedges, yedges = np.histogram2d(energy_events_gtis["DETX"], energy_events_gtis["DETY"], bins = (quantiles_DETX, quantiles_DETY))
-            xedges[0] = min_DETX - 1
-            yedges[0] = min_DETY - 1
-            xedges[-1] = max_DETX + 1
-            yedges[-1] = max_DETY + 1
-            
-            # start a table for the bad time intervals and how they should look
-            btis_table = Table([np.zeros(n_rows), np.zeros(n_rows), np.zeros(n_rows), np.zeros(n_rows),np.zeros(n_rows)], 
-                                names=('DETX_bin_start', 'DETX_bin_end', 'DETY_bin_start', 'DETY_bin_end', 'counts_gtis'))
-            
-            for i in range(n_bins_DETX):
-                for j in range(n_bins_DETY):
-                    btis_table['DETX_bin_start'][i*n_bins_DETX + j] = xedges[i]
-                    btis_table['DETX_bin_end'][i*n_bins_DETX + j] = xedges[i + 1]
-                    btis_table['DETY_bin_start'][i*n_bins_DETX + j] = yedges[j]
-                    btis_table['DETY_bin_end'][i*n_bins_DETX + j] = yedges[j + 1]
-                    btis_table['counts_gtis'][i*n_bins_DETX + j] = H_gtis[i][j]
-            
-            for bti_counter in range(n_btis):
-                # extract the events of one specific cluster of flaring background found by DBSCAN
-                cluster_mask = (energy_events_btis['flare_label'] == bti_counter)
-                events_PN_cluster = energy_events_btis[cluster_mask]
-            
-                if len(events_PN_cluster) > 0:
-                    # get the time of the specific cluster
-                    time_cluster = max(events_PN_cluster["TIME"]) - min(events_PN_cluster["TIME"])
-                            
-                    btis_table['bti_' + str(bti_counter) + '_keep'] = ((btis_table['counts_gtis']/time_gtis) * time_cluster)
-          
-                    # now in one cluster look at each position bin
-                    for bin_counter in range(len(btis_table)):
-                        # start and end of the bin
-                        DETY_start = btis_table['DETY_bin_start'][bin_counter]
-                        DETY_end = btis_table['DETY_bin_end'][bin_counter]
-                        DETX_start = btis_table['DETX_bin_start'][bin_counter]
-                        DETX_end = btis_table['DETX_bin_end'][bin_counter]
-                
-                        # extract the number of events to be kept
-                        n_keep = btis_table['bti_' + str(bti_counter) + '_keep'][bin_counter]
-                
-                        # get only those events within the position interval
-                        remove_mask = (events_PN_cluster['DETY'] > DETY_start) & (events_PN_cluster['DETY'] <= DETY_end) & (events_PN_cluster['DETX'] > DETX_start) & (events_PN_cluster['DETX'] <= DETX_end)
-                        events_for_remove = events_PN_cluster[remove_mask]
-                
-                        #randomly remove n_remove events
-                        events_cleaned_interval = np.random.choice(events_for_remove, size = min(round(n_keep),len(events_for_remove)), replace = False)
-                    
-                        #append the to a cleaned data set
-                        events_PN_btis_cleaned = np.append(events_PN_btis_cleaned, events_cleaned_interval)
-                            
         self.events_after_cleaning = Table(events_PN_btis_cleaned)
         self.plot_identifier = 'after'
         
         print('  - Finished the bti cleaning.')
+
+
+    """
+    Parallel thread for cleaning BTIs
+    """
+    def clean_btis_thread(self, input=[], events_PN_btis_cleaned=[], n_rows=1):
+        energy_events = input
+
+        n_bins_DETY = self.n_bins_DETY
+        min_DETX = self.min_DETX
+        min_DETY = self.min_DETY
+        max_DETX = self.max_DETX
+        max_DETY = self.max_DETY
+        n_bins_DETX = self.n_bins_DETX
+        n_btis = self.n_btis
+        time_gtis = self.time_gtis
+        events = self.events_before_cleaning
+
+        l = len(energy_events)
+        print(f'\t- starting with energy bin no # energy_events len = {l}')
+
+        energy_events_gtis = energy_events[(energy_events['flare_label'] == -1)]
+        energy_events_btis = energy_events[(energy_events['flare_label'] != -1)]
+
+        # set the bins
+        quant_prob_DETY = np.round(np.linspace(0.0, 1.0, num=n_bins_DETY + 1), 3)
+        quant_prob_DETX = np.round(np.linspace(0.0, 1.0, num=n_bins_DETY + 1), 3)
+        quantiles_DETY = np.quantile(events["DETY"], quant_prob_DETY)
+        quantiles_DETX = np.quantile(events["DETX"], quant_prob_DETX)
+
+        # calculate the histogram for all the good time intervals
+        H_gtis, xedges, yedges = np.histogram2d(energy_events_gtis["DETX"], energy_events_gtis["DETY"],
+                                                bins=(quantiles_DETX, quantiles_DETY))
+        xedges[0] = min_DETX - 1
+        yedges[0] = min_DETY - 1
+        xedges[-1] = max_DETX + 1
+        yedges[-1] = max_DETY + 1
+
+        # start a table for the bad time intervals and how they should look
+        btis_table = Table([np.zeros(n_rows), np.zeros(n_rows), np.zeros(n_rows), np.zeros(n_rows), np.zeros(n_rows)],
+                           names=('DETX_bin_start', 'DETX_bin_end', 'DETY_bin_start', 'DETY_bin_end', 'counts_gtis'))
+
+        for i in range(n_bins_DETX):
+            for j in range(n_bins_DETY):
+                btis_table['DETX_bin_start'][i * n_bins_DETX + j] = xedges[i]
+                btis_table['DETX_bin_end'][i * n_bins_DETX + j] = xedges[i + 1]
+                btis_table['DETY_bin_start'][i * n_bins_DETX + j] = yedges[j]
+                btis_table['DETY_bin_end'][i * n_bins_DETX + j] = yedges[j + 1]
+                btis_table['counts_gtis'][i * n_bins_DETX + j] = H_gtis[i][j]
+
+        for bti_counter in range(n_btis):
+            # extract the events of one specific cluster of flaring background found by DBSCAN
+            cluster_mask = (energy_events_btis['flare_label'] == bti_counter)
+            events_PN_cluster = energy_events_btis[cluster_mask]
+
+            if len(events_PN_cluster) > 0:
+                # get the time of the specific cluster
+                time_cluster = max(events_PN_cluster["TIME"]) - min(events_PN_cluster["TIME"])
+
+                btis_table['bti_' + str(bti_counter) + '_keep'] = (
+                            (btis_table['counts_gtis'] / time_gtis) * time_cluster)
+
+                # now in one cluster look at each position bin
+                for bin_counter in range(len(btis_table)):
+                    # start and end of the bin
+                    DETY_start = btis_table['DETY_bin_start'][bin_counter]
+                    DETY_end = btis_table['DETY_bin_end'][bin_counter]
+                    DETX_start = btis_table['DETX_bin_start'][bin_counter]
+                    DETX_end = btis_table['DETX_bin_end'][bin_counter]
+
+                    # extract the number of events to be kept
+                    n_keep = btis_table['bti_' + str(bti_counter) + '_keep'][bin_counter]
+
+                    # get only those events within the position interval
+                    remove_mask = (events_PN_cluster['DETY'] > DETY_start) & (events_PN_cluster['DETY'] <= DETY_end) & (
+                                events_PN_cluster['DETX'] > DETX_start) & (events_PN_cluster['DETX'] <= DETX_end)
+                    events_for_remove = events_PN_cluster[remove_mask]
+
+                    # randomly remove n_remove events
+                    events_cleaned_interval = np.random.choice(events_for_remove,
+                                                               size=min(round(n_keep), len(events_for_remove)),
+                                                               replace=False)
+
+                    # append the to a cleaned data set
+                    events_PN_btis_cleaned = np.append(events_PN_btis_cleaned, events_cleaned_interval)
+
+
+
+
 
     """
     Plot the distributions according to position, energy and time
