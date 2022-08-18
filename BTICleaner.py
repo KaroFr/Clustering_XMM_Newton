@@ -12,7 +12,6 @@ import matplotlib.pyplot as plt
 from astropy.table import Table
 import os, time
 
-from concurrent.futures import ThreadPoolExecutor, wait, as_completed
 from Multithreading import Multithreading
 
 
@@ -175,8 +174,6 @@ class BTICleaner:
         self.step_counter = 2
         
         events = self.events_before_cleaning
-        n_btis = self.n_btis
-        time_gtis = self.time_gtis
         
         # set the detector boundaries
         self.min_DETX = min(events['DETX'])
@@ -230,12 +227,12 @@ class BTICleaner:
         threads = energy_events_list_len
         m = Multithreading(threads=threads, function=self.clean_btis_thread, input_list=energy_events_list,
                            events_PN_btis_cleaned=events_PN_btis_cleaned, n_rows=n_rows)
-        m.multi()
+        cleaning_result = m.multi()
         t_5 = time.time()
         print(f'\t** Time to run all threads in parallel : {t_5 - t_4:.4f} seconds')
         # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-        self.events_after_cleaning = Table(events_PN_btis_cleaned)
+        self.events_after_cleaning = vstack([Table(events_PN_btis_cleaned),cleaning_result])
         self.plot_identifier = 'after'
         
         print('  - Finished the bti cleaning.')
@@ -258,7 +255,7 @@ class BTICleaner:
         events = self.events_before_cleaning
 
         l = len(energy_events)
-        print(f'\t- starting with energy bin no # energy_events len = {l}')
+        print(f'\t- starting with energy bin no # energy_events len = {l} and events_PN_btis_cleaned = {len(events_PN_btis_cleaned)}')
 
         energy_events_gtis = energy_events[(energy_events['flare_label'] == -1)]
         energy_events_btis = energy_events[(energy_events['flare_label'] != -1)]
@@ -288,6 +285,9 @@ class BTICleaner:
                 btis_table['DETY_bin_start'][i * n_bins_DETX + j] = yedges[j]
                 btis_table['DETY_bin_end'][i * n_bins_DETX + j] = yedges[j + 1]
                 btis_table['counts_gtis'][i * n_bins_DETX + j] = H_gtis[i][j]
+
+        # start table for cleaned interval
+        energy_events_cleaned = Table()
 
         for bti_counter in range(n_btis):
             # extract the events of one specific cluster of flaring background found by DBSCAN
@@ -323,7 +323,8 @@ class BTICleaner:
                                                                replace=False)
 
                     # append the to a cleaned data set
-                    events_PN_btis_cleaned = np.append(events_PN_btis_cleaned, events_cleaned_interval)
+                    energy_events_cleaned = vstack([energy_events_cleaned, Table(events_cleaned_interval)])
+        return energy_events_cleaned
 
 
 
