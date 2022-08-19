@@ -15,7 +15,7 @@ from sklearn.neighbors import NearestNeighbors
 import itertools
 import os
 
-from Multithreading import Multiprocessing
+from Parallelization import Multiprocessing
 
 """
 Class to use clustering (DBSCAN and HDBSCAN) to identify sources

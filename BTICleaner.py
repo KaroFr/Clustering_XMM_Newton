@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from astropy.table import Table
 import os
 
-from Multithreading import Multithreading, Multiprocessing
+from Parallelization import Multithreading, Multiprocessing
 
 
 """
