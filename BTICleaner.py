@@ -10,9 +10,9 @@ from Helpers import pick_sample
 from astropy.table import vstack
 import matplotlib.pyplot as plt
 from astropy.table import Table
-import os, time
+import os
 
-from Multithreading import Multithreading
+from Multithreading import Multithreading, Multiprocessing
 
 
 """
@@ -166,8 +166,6 @@ class BTICleaner:
     """
     def clean_btis(self):
         n_bins_PI = self.n_bins_PI
-        n_bins_DETX = self.n_bins_DETX
-        n_bins_DETY = self.n_bins_DETY
         
         if self.step_counter == 0:
             self.detect_btis()
@@ -199,40 +197,35 @@ class BTICleaner:
 
         # initiate a table for the cleaned events
         gtis_mask = (events['flare_label'] == -1)
-        events_PN_btis_cleaned = events[gtis_mask]
-
-        # need it for the btis_table
-        n_rows = n_bins_DETX*n_bins_DETY
+        events_gtis = events[gtis_mask]
 
         #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
         #
-        #   Sequential job
+        #   No parallelization
         #
-        # print('-' * 100)
-        # print('  - Start clean_btis in a row ...')
-        # t_0 = time.time()
+        # cleaning_result = Table()
         # for energy_events in energy_events_list:
-        #     self.clean_btis_thread(input=energy_events,
-        #                            events_PN_btis_cleaned=events_PN_btis_cleaned, n_rows=n_rows)
-        # t_1 = time.time() - t_0
-        # print(f'\t** Time to run all threads in sequence : {t_1:.2f} seconds')
-        # print('-' * 100)
+        #     energy_events_cleaned = self.clean_btis_thread(energy_events)
+        #     cleaning_result = vstack([cleaning_result, Table(energy_events_cleaned)])
+        #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        #
+        #   Multi Threading
+        #
+        # energy_events_list_len = len(energy_events_list)
+        # threads = energy_events_list_len
+        # m = Multithreading(threads=threads, function=self.clean_btis_thread, input_list=energy_events_list)
+        # cleaning_result = m.multi()
         # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
         #
-        #   Parallel job
+        #   Multi Processing
         #
-        print('  - Start clean_btis in parallel ...')
-        t_4 = time.time()
         energy_events_list_len = len(energy_events_list)
         threads = energy_events_list_len
-        m = Multithreading(threads=threads, function=self.clean_btis_thread, input_list=energy_events_list,
-                           events_PN_btis_cleaned=events_PN_btis_cleaned, n_rows=n_rows)
+        m = Multiprocessing(threads=threads, function=self.clean_btis_thread, input_list=energy_events_list)
         cleaning_result = m.multi()
-        t_5 = time.time()
-        print(f'\t** Time to run all threads in parallel : {t_5 - t_4:.4f} seconds')
         # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-        self.events_after_cleaning = vstack([Table(events_PN_btis_cleaned),cleaning_result])
+        self.events_after_cleaning = vstack([Table(events_gtis),cleaning_result])
         self.plot_identifier = 'after'
         
         print('  - Finished the bti cleaning.')
@@ -241,21 +234,22 @@ class BTICleaner:
     """
     Parallel thread for cleaning BTIs
     """
-    def clean_btis_thread(self, input=[], events_PN_btis_cleaned=[], n_rows=1):
+    def clean_btis_thread(self, input=[]):
         energy_events = input
 
         n_bins_DETY = self.n_bins_DETY
+        n_bins_DETX = self.n_bins_DETX
+        n_rows = n_bins_DETX*n_bins_DETY
         min_DETX = self.min_DETX
         min_DETY = self.min_DETY
         max_DETX = self.max_DETX
         max_DETY = self.max_DETY
-        n_bins_DETX = self.n_bins_DETX
         n_btis = self.n_btis
         time_gtis = self.time_gtis
         events = self.events_before_cleaning
 
         l = len(energy_events)
-        print(f'\t- starting with energy bin no # energy_events len = {l} and events_PN_btis_cleaned = {len(events_PN_btis_cleaned)}')
+        print(f'\t- starting with energy bin no # energy_events len = {l}')
 
         energy_events_gtis = energy_events[(energy_events['flare_label'] == -1)]
         energy_events_btis = energy_events[(energy_events['flare_label'] != -1)]
@@ -324,6 +318,8 @@ class BTICleaner:
 
                     # append the to a cleaned data set
                     energy_events_cleaned = vstack([energy_events_cleaned, Table(events_cleaned_interval)])
+        l = len(energy_events_cleaned)
+        print(f'\t- finished with energy bin no # energy_events len = {l}')
         return energy_events_cleaned
 
 
