@@ -15,6 +15,8 @@ from sklearn.neighbors import NearestNeighbors
 import itertools
 import os
 
+from Multithreading import Multiprocessing
+
 """
 Class to use clustering (DBSCAN and HDBSCAN) to identify sources
 """
@@ -32,6 +34,8 @@ class SourceDetector:
                  ms_HDBSCAN = [20,40,30,60], cse_HDBSCAN = [0.005,0.005,0.005,0.005], not_noise_threshold = 2):
         self.events_sources = events
         self.n_events_bnd = len(events)
+        self.range_DETX = np.ptp(events['DETX_norm'])
+        self.range_DETY = np.ptp(events['DETY_norm'])
         self.events_noise = Table()
         observation_ID = header['OBS_ID']
         self.observation_ID = observation_ID
@@ -82,8 +86,8 @@ class SourceDetector:
         n_events = self.n_events_bnd
         ms_noise_det = self.ms_noise_det
 
-        range_DETX = np.ptp(events['DETX_norm'])
-        range_DETY = np.ptp(events['DETY_norm'])
+        range_DETX = self.range_DETX 
+        range_DETY = self.range_DETY 
         # number of bins of 150.000 to 300.000 events possible
         n_bins = int(np.floor(n_events/100000))
 
@@ -105,9 +109,20 @@ class SourceDetector:
                 end_index = (bin_counter + 1) * events_per_bin
                 events_for_noise_detection.append(events[start_index: end_index])
             
-            # start an empty table for the DBSCAN results
+            # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+            #
+            #   Multi Processing
+            #
+            # events_for_noise_detection_len = len(events_for_noise_detection)
+            # threads = events_for_noise_detection_len
+            # m = Multiprocessing(threads=threads, function=self.noise_detection_thread, input_list=events_for_noise_detection)
+            # noise_detection_result = m.multi()
+            # events = noise_detection_result.copy()
+            # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+            #
+            #   No parallelization
+            #
             events_table = Table()
-            
             for inx,event_bin in enumerate(events_for_noise_detection):
                 print("   -> " + str(inx + 1) + ". run of DBSCAN started.")
                 
@@ -133,6 +148,7 @@ class SourceDetector:
                 
                 print("   -> " + str(inx + 1) + ". run of DBSCAN finished.")
             events = events_table.copy()
+            # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
         ##################################################################################
         ################### if the number of events is low
@@ -164,6 +180,40 @@ class SourceDetector:
         self.n_noise_and = len(self.events_noise)
         
         print("  - Finished the Noise Detection.")
+    
+    """
+    Parallel thread for noise detection
+    """
+    def noise_detection_thread(self, input=[]):
+        event_bin = input
+        
+        range_DETX = self.range_DETX 
+        range_DETY = self.range_DETY 
+        ms_noise_det = self.ms_noise_det
+        
+        l = len(event_bin)
+        print(f'\t- starting with event bin no # event_bin len = {l}')
+        
+        # get events into right shape for the DBSCAN
+        events_for_DBSCAN = event_bin['DETX_norm', 'DETY_norm']
+        event_list = []
+        for i in range(len(events_for_DBSCAN)):
+            event_list.append(list(events_for_DBSCAN[i]))   
+        
+        # set the hyper parameters
+        n_events_bin = len(event_bin)
+        eps_noise_det = np.sqrt((range_DETX*range_DETY*ms_noise_det)/(np.pi*n_events_bin))
+        self.eps_noise_det = eps_noise_det
+        
+        # perform the clustering
+        clustering = DBSCAN(min_samples = ms_noise_det, eps = eps_noise_det, n_jobs = -1)
+        clustering.fit(event_list)
+        
+        # save the labels
+        event_bin["DBSCAN_cluster"] = clustering.labels_
+        
+        return event_bin
+        
     
     """
     Helping method for the ensemble.
